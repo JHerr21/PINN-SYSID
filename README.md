@@ -4,7 +4,7 @@ Physics Informed System Identification for Model-Based Closed Loop Seizure Contr
 This project tests whether a better-identified model gives better closed-loop seizure control. A physics-informed neural network (PINN) and a joint unscented Kalman filter (UKF) each estimate the parameters of a Jansen-Rit neural mass model from simulated EEG. An LQR controller is then built on each identified model and judged on how well it suppresses seizure dynamics in the true model.
 
 ## Research questions
- 
+
 | ID | Question |
 | --- | --- |
 | H1 | Does the PINN recover parameters and hidden states better than the joint UKF? |
