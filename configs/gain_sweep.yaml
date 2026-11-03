@@ -1,0 +1,29 @@
+# T1.4: map the Jansen-Rit regimes over excitatory gain A and constant input p,
+# to choose the input level, locate the seizure regime and choose the
+# seizure-band edges. Run with experiments/01_simulator.py.
+name: gain_sweep
+seed: 0              # the sweep is deterministic; seed recorded for the run folder
+
+A_min: 2.0           # mV
+A_max: 5.0           # mV
+A_step: 0.05         # mV (61 values)
+
+p_min: 60.0          # Hz, constant external input
+p_max: 240.0         # Hz
+p_step: 10.0         # Hz (19 values)
+
+duration_s: 10.0     # s simulated per (A, p)
+transient_s: 2.0     # s dropped from the start before analysis
+
+welch_nperseg: 512   # samples at 256 Hz (2 s windows, 0.5 Hz resolution)
+steady_tol_mV: 0.1   # peak-to-peak y below this counts as steady (no oscillation)
+
+bifurcation_p: [90.0, 120.0, 160.0, 220.0]   # Hz, p values shown as bifurcation diagrams
+
+# Figure F1: traces and spectra of both regimes at the chosen input level
+f1_p: 90.0                # Hz, chosen mean input
+example_A: [3.25, 4.0]    # mV, healthy (nominal) and seizure-regime examples
+f1_trace_s: 3.0           # s of each example trace shown
+
+# Chosen in T1.4: holds the fundamental (2.0-5.0 Hz) of every seizure-regime A at p = 90 Hz
+seizure_band_Hz: [2.0, 7.0]
