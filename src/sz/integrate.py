@@ -121,28 +121,41 @@ def euler_maruyama(
     u: Any = 0.0,
     dt: float = 1.0 / FS_SIM,
     generator: Optional[torch.Generator] = None,
+    noise: Optional[torch.Tensor] = None,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     """Euler-Maruyama for p(t) = p_mean + sigma * white noise.
 
     Args:
         x0: initial state, shape (6,).
         theta: parameters (see sz.model.make_params).
-        p_mean: mean input in Hz.
-        sigma: noise intensity in Hz * sqrt(s).
+        p_mean: mean input in Hz, scalar or broadcastable to the batch.
+        sigma: noise intensity in Hz * sqrt(s), scalar or broadcastable
+            to the batch.
         n_steps: number of steps.
         u: stimulation in Hz, scalar or shape (n_steps,).
         dt: step size in s.
         generator: torch.Generator for the noise; None uses the global
             torch RNG (seeded by sz.runs.set_seed).
+        noise: optional standard-normal draws of shape
+            (n_steps,) + x0.shape[:-1], e.g. drawn per run from its own seed.
 
     Returns:
         (states, p_realized): states of shape (n_steps + 1, 6) including
         x0, and the realized input p_k of shape (n_steps,), held over
         step k.
     """
-    noise = torch.randn(
-        n_steps, dtype=x0.dtype, device=x0.device, generator=generator
-    )
+    if noise is None:
+        noise = torch.randn(
+            (n_steps,) + tuple(x0.shape[:-1]),
+            dtype=x0.dtype, device=x0.device, generator=generator
+        )
+    else:
+        noise = torch.as_tensor(noise, dtype=x0.dtype, device=x0.device)
+        expected = (n_steps,) + tuple(x0.shape[:-1])
+        if tuple(noise.shape) != expected:
+            raise ValueError(f"noise has shape {tuple(noise.shape)}, expected {expected}")
+    p_mean = torch.as_tensor(p_mean, dtype=x0.dtype, device=x0.device)
+    sigma = torch.as_tensor(sigma, dtype=x0.dtype, device=x0.device)
     p_realized = p_mean + sigma * noise / math.sqrt(dt)
     states = euler(x0, theta, p_realized, u, dt=dt, n_steps=n_steps)
     return states, p_realized

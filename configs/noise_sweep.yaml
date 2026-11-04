@@ -1,0 +1,26 @@
+# T1.5: characterize the input noise intensity sigma before generating datasets.
+# Starts at Wendling's input (mean 90 Hz, SD 30 Hz per sample at 512 Hz),
+# sigma0 = 30 * sqrt(1/512) = 1.326 Hz*sqrt(s), then halves sigma to locate
+# the healthy/seizure boundary under noise. Run with experiments/01_noise_sweep.py.
+name: noise_sweep
+seed: 0                   # base seed; run seeds are seed + index
+
+p_mean: 90.0              # Hz (chosen in T1.4)
+sigma_values: [1.326, 0.663, 0.331, 0.166, 0.083, 0.0]   # Hz*sqrt(s)
+
+A_min: 2.5                # mV
+A_max: 5.0                # mV
+A_step: 0.05              # mV (51 values)
+n_seeds: 5                # input-noise realizations per (A, sigma)
+
+duration_s: 20.0          # s recorded (longest dataset duration)
+transient_s: 2.0          # s dropped from the start
+
+seizure_band_Hz: [2.0, 7.0]   # chosen in T1.4
+welch_nperseg: 512            # samples at 256 Hz
+spike_threshold_mV: 8.0       # a 1 s window with max(y) above this counts as a seizure window
+window_s: 1.0
+
+example_A: [3.25, 3.75, 4.0, 4.5]   # mV, dataset A values shown as example traces
+example_sigma: 1.326                # Hz*sqrt(s), sigma used for the example traces
+example_trace_s: 4.0                # s shown per example trace

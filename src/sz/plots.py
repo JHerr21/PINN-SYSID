@@ -247,3 +247,110 @@ def plot_f1(
     fig.savefig(out_path, dpi=150)
     plt.close(fig)
     return out_path
+
+
+# Ordinal blue steps (light -> dark) for ordered series such as noise levels
+ORDINAL_BLUE = ["#86b6ef", "#5598e7", "#2a78d6", "#1c5cab", "#104281", "#0d366b"]
+ 
+ 
+def plot_noise_sweep(
+    npz_path: Union[str, Path],
+    cfg: Mapping[str, Any],
+    out_path: Union[str, Path],
+) -> Path:
+    """T1.5 noise sweep: seizure-window fraction and seizure-band power vs A per sigma,
+    plus example traces at the dataset A values.
+ 
+    Lines are means over seeds; the shaded band on the left panel spans the
+    min and max over seeds. Darker blue = larger sigma; sigma = 0 is gray dashed.
+    """
+    _style()
+    d = np.load(npz_path)
+    A, S = d["A"], d["sigma"]
+    frac, band = d["frac"], d["band"]
+    ex_A, ex_y = d["example_A"], d["example_y"]
+    fs = float(d["fs_obs"])
+    ex_s = float(d["example_sigma"])
+ 
+    order = np.argsort(S)                         # small -> large sigma
+    nonzero = [i for i in order if S[i] > 0]
+    colors = {i: ORDINAL_BLUE[k] for k, i in enumerate(nonzero)}
+ 
+    fig = plt.figure(figsize=(13, 7.4))
+    gs = fig.add_gridspec(
+        len(ex_A), 3, width_ratios=[1, 1, 1.05], wspace=0.32, hspace=0.3,
+        left=0.06, right=0.98, top=0.82, bottom=0.09,
+    )
+ 
+    def style_for(i):
+        if S[i] == 0:
+            return dict(color=MUTED, lw=1.5, ls=(0, (4, 3)))
+        return dict(color=colors[i], lw=2)
+ 
+    ax1 = fig.add_subplot(gs[:, 0])
+    for i in order:
+        ax1.plot(A, frac[i].mean(axis=1), label=f"σ = {S[i]:g}", **style_for(i))
+        if S[i] > 0:
+            ax1.fill_between(A, frac[i].min(axis=1), frac[i].max(axis=1),
+                             color=colors[i], alpha=0.15, lw=0)
+    ax1.set_ylim(-0.02, 1.02)
+    ax1.set_xlim(A[0], A[-1])
+    ax1.set_xlabel("Excitatory gain A (mV)")
+    ax1.set_ylabel(f"Share of {cfg['window_s']:g} s windows with a spike")
+    ax1.set_title("Seizure-window fraction", loc="left")
+ 
+    ax2 = fig.add_subplot(gs[:, 1], sharex=ax1)
+    for i in nonzero:  # sigma = 0 has ~zero power below onset, off a log axis
+        ax2.plot(A, band[i].mean(axis=1), **style_for(i))
+    ax2.set_yscale("log")
+    ax2.set_xlabel("Excitatory gain A (mV)")
+    b_lo, b_hi = cfg["seizure_band_Hz"]
+    ax2.set_ylabel(f"Power in {b_lo:g}-{b_hi:g} Hz (mV², log)")
+    ax2.set_title("Seizure-band power", loc="left")
+ 
+    for ax in (ax1, ax2):
+        ax.grid(axis="y", color=GRID, lw=0.6)
+        ax.set_axisbelow(True)
+    ax1.legend(loc="upper left", title="Input noise (Hz·√s)", title_fontsize=8)
+ 
+    n = ex_y.shape[1]
+    t = np.arange(n) / fs
+    y_lo, y_hi = float(ex_y.min()), float(ex_y.max())
+    pad = 0.06 * (y_hi - y_lo)
+    axes = []
+    for k, a in enumerate(ex_A):
+        axt = fig.add_subplot(gs[k, 2], sharex=axes[0] if axes else None)
+        axt.plot(t, ex_y[k], color=SERIES_1, lw=1)
+        axt.axhline(float(cfg["spike_threshold_mV"]), color=MUTED, lw=0.8, ls=(0, (2, 2)))
+        axt.set_ylim(y_lo - pad, y_hi + pad)
+        axt.grid(axis="y", color=GRID, lw=0.6)
+        axt.set_axisbelow(True)
+        axt.text(0.01, 0.95, f"A = {a:g} mV", transform=axt.transAxes, color=INK,
+                 fontsize=8, fontweight="bold", va="top",
+                 bbox=dict(facecolor=SURFACE, edgecolor="none", pad=1.5))
+        axt.set_ylabel("y (mV)")
+        if k < len(ex_A) - 1:
+            axt.tick_params(labelbottom=False)
+        axes.append(axt)
+    axes[0].set_title(f"Dataset A values at σ = {ex_s:g}", loc="left")
+    axes[-1].set_xlabel("Time after transient (s)")
+ 
+    fig.suptitle(
+        f"Input-noise sweep at p̄ = {cfg['p_mean']:g} Hz: where the seizure regime starts "
+        f"for each σ",
+        x=0.06, ha="left", color=INK, fontsize=12, fontweight="bold",
+    )
+    fig.text(
+        0.06, 0.88,
+        f"Euler–Maruyama at 2048 Hz, {cfg['duration_s']:g} s per run after a "
+        f"{cfg['transient_s']:g} s transient, {frac.shape[2]} seeds per point; "
+        "lines are seed means, shading on the left spans the seeds.\n"
+        f"Right: dotted line = {cfg['spike_threshold_mV']:g} mV spike threshold. "
+        "σ = 0 is left off the power panel (no power below onset).",
+        color=INK_2, fontsize=9, ha="left",
+    )
+    out_path = Path(out_path)
+    fig.savefig(out_path, dpi=150)
+    plt.close(fig)
+    return out_path
+ 
