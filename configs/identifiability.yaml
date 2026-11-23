@@ -1,0 +1,25 @@
+# T2.1-T2.2: fit-error landscapes and local sensitivity / Fisher information
+# against one reference record. Run with experiments/04_identifiability.py.
+name: identifiability
+seed: 0                   # the analysis is deterministic; seed recorded for the run folder
+
+# Reference: nominal cell (10 s, 10 dB SNR), seizure regime A = 4.0, seed 0, record 0
+dataset: data/synthetic/nominal/A4.00_seed0   # relative to the repo root
+record: 0
+
+# Model runs restart from the true state at the start of each window and are
+# driven by the record's realized input (PINN window length, plan decision D4)
+window_s: 0.5
+
+# T2.1: fit-error landscapes (NMSE of the clean output y = y1 - y2)
+pairs:                    # (x-axis parameter, y-axis parameter)
+  - [A, B]
+  - [A, C]
+  - [A, a]
+rel_range: 0.05           # each axis spans true value * (1 -/+ rel_range)
+n_grid: 41                # points per axis (odd, so the true value is a grid point)
+max_batch: 200            # grid points simulated together (~190 MB of states)
+
+# T2.2: sensitivity of y to log(theta) via torch.func.jacfwd; Fisher information
+# with the record's observation-noise SD
+sensitivity_params: [A, B, a, b, C, e0, v0, r]

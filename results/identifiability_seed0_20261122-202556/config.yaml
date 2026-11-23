@@ -1,0 +1,24 @@
+name: identifiability
+seed: 0
+dataset: data/synthetic/nominal/A4.00_seed0
+record: 0
+window_s: 0.5
+pairs:
+- - A
+  - B
+- - A
+  - C
+- - A
+  - a
+rel_range: 0.05
+n_grid: 41
+max_batch: 200
+sensitivity_params:
+- A
+- B
+- a
+- b
+- C
+- e0
+- v0
+- r

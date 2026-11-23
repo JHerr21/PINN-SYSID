@@ -15,7 +15,7 @@ matplotlib.use("Agg")
 
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
-from matplotlib.colors import LinearSegmentedColormap  # noqa: E402
+from matplotlib.colors import LinearSegmentedColormap, LogNorm  # noqa: E402
 from matplotlib.patches import Patch  # noqa: E402
 
 # Palette
@@ -353,4 +353,142 @@ def plot_noise_sweep(
     fig.savefig(out_path, dpi=150)
     plt.close(fig)
     return out_path
- 
+
+
+ # Diverging blue <-> red with a neutral gray midpoint (correlations, -1 ... +1)
+DIVERGING = LinearSegmentedColormap.from_list(
+    "div_blue_red", ["#104281", "#5598e7", "#b7d3f6", NEUTRAL, "#f2b3b2", "#e66767", "#a8302f"]
+)
+
+PARAM_UNITS = {"A": "mV", "B": "mV", "a": "1/s", "b": "1/s", "C": "",
+               "e0": "1/s", "v0": "mV", "r": "1/mV"}
+
+
+def _param_label(name: str) -> str:
+    unit = PARAM_UNITS.get(name, "")
+    return f"{name} ({unit})" if unit else name
+
+
+def plot_f2(
+    npz_path: Union[str, Path],
+    cfg: Mapping[str, Any],
+    out_path: Union[str, Path],
+) -> Path:
+    """Figure F2: fit-error landscapes (T2.1) and sensitivity ranking (T2.2).
+
+    Top row: NMSE of the clean output over each parameter pair (log color
+    scale, shared by all pairs; light = low error), true values ringed.
+    Bottom left: Fisher-information eigenvalues (log scale), each labeled
+    with the parameters that dominate its eigenvector. Bottom right:
+    parameter correlation matrix from the inverse Fisher information.
+    """
+    _style()
+    d = np.load(npz_path)
+    pair_names = d["pair_names"]
+    n_pairs = len(pair_names)
+    names = [str(n) for n in d["sens_names"]]
+    eig, vec, corr = d["eigvals"], d["eigvecs"], d["corr"]
+
+    fig = plt.figure(figsize=(4.4 * max(n_pairs, 3), 9.6))
+    gs = fig.add_gridspec(
+        2, n_pairs, height_ratios=[1, 1.05], wspace=0.32, hspace=0.42,
+        left=0.06, right=0.95, top=0.86, bottom=0.07,
+    )
+
+    # Top: landscapes on one shared log color scale
+    all_nmse = np.concatenate([d[f"nmse_{k}"].ravel() for k in range(n_pairs)])
+    pos = all_nmse[all_nmse > 0]
+    vmin = max(float(pos.min()), 1e-4) if pos.size else 1e-4
+    vmax = float(all_nmse.max())
+    norm = LogNorm(vmin=vmin, vmax=vmax)
+    im = None
+    for k in range(n_pairs):
+        ax = fig.add_subplot(gs[0, k])
+        n1, n2 = (str(s) for s in pair_names[k])
+        v1, v2, E = d[f"v1_{k}"], d[f"v2_{k}"], d[f"nmse_{k}"]
+        d1, d2 = v1[1] - v1[0], v2[1] - v2[0]
+        im = ax.imshow(
+            np.clip(E.T, vmin, None), origin="lower", aspect="auto",
+            extent=[v1[0] - d1 / 2, v1[-1] + d1 / 2, v2[0] - d2 / 2, v2[-1] + d2 / 2],
+            cmap=SEQ_BLUE, norm=norm, interpolation="nearest",
+        )
+        t1, t2 = float(d[f"true_{k}"][0]), float(d[f"true_{k}"][1])
+        ax.scatter([t1], [t2], s=60, facecolors="none", edgecolors=INK, linewidths=1.5, zorder=3)
+        ax.set_xlabel(_param_label(n1))
+        ax.set_ylabel(_param_label(n2))
+        ax.set_title(f"({n1}, {n2})", loc="left")
+        for side in ("top", "right"):
+            ax.spines[side].set_visible(True)
+    cb = fig.colorbar(im, ax=fig.axes[:n_pairs], fraction=0.02, pad=0.015)
+    cb.set_label("NMSE of y (log)", color=INK_2)
+    cb.outline.set_edgecolor(AXIS)
+    cb.ax.tick_params(colors=MUTED, labelsize=8)
+
+    # Bottom row: its own split so both panels get the width they need
+    gs_b = gs[1, :].subgridspec(1, 2, width_ratios=[1.5, 1], wspace=0.18)
+
+    # Bottom left: Fisher eigenvalues
+    axe = fig.add_subplot(gs_b[0, 0])
+    idx = np.arange(1, len(eig) + 1)
+    axe.scatter(idx, eig, s=40, color=SERIES_1, zorder=3)
+    axe.set_yscale("log")
+    axe.set_xticks(idx)
+    axe.set_xlim(0.5, len(eig) + 0.9)
+    lo, hi = float(eig.min()), float(eig.max())
+    axe.set_ylim(lo / 3.0, hi * 3.0)
+    for i in range(len(eig)):
+        v = vec[:, i]
+        top = np.argsort(-np.abs(v))[:2]
+        lab = "\n".join(f"{names[j]} {v[j]:+.2f}" for j in top)
+        axe.text(idx[i] + 0.12, eig[i], lab, color=INK_2, fontsize=7, ha="left", va="center")
+    axe.grid(axis="y", color=GRID, lw=0.6)
+    axe.set_axisbelow(True)
+    axe.set_xlabel("Eigenvalue rank (1 = best-determined direction)")
+    axe.set_ylabel("Fisher information eigenvalue (log)")
+    axe.set_title("Fisher information eigenvalues, top two eigenvector loadings", loc="left")
+
+    # Bottom right: correlation matrix (diagonal = 1 by definition, shown neutral)
+    axc = fig.add_subplot(gs_b[0, 1])
+    n = len(names)
+    off_diag = np.where(np.eye(n, dtype=bool), np.nan, corr)
+    cmap_c = DIVERGING.copy()
+    cmap_c.set_bad(NEUTRAL)
+    imc = axc.imshow(off_diag, cmap=cmap_c, vmin=-1.0, vmax=1.0, interpolation="nearest")
+    axc.set_xticks(range(n))
+    axc.set_yticks(range(n))
+    axc.set_xticklabels(names)
+    axc.set_yticklabels(names)
+    axc.tick_params(length=0)
+    for side in ("top", "right", "left", "bottom"):
+        axc.spines[side].set_visible(False)
+    for i in range(n):
+        for j in range(n):
+            if i == j:
+                continue
+            c = corr[i, j]
+            axc.text(j, i, f"{c:+.2f}", ha="center", va="center", fontsize=7,
+                     color=SURFACE if abs(c) > 0.6 else INK)
+    axc.set_title("Parameter correlations (from F⁻¹)", loc="left")
+    cbc = fig.colorbar(imc, ax=axc, fraction=0.04, pad=0.02)
+    cbc.set_label("Correlation", color=INK_2)
+    cbc.outline.set_edgecolor(AXIS)
+    cbc.ax.tick_params(colors=MUTED, labelsize=8)
+
+    A_true = float(d["theta_true_A"])
+    fig.suptitle(
+        f"F2. Identifiability at A = {A_true:g} mV: fit-error landscapes and sensitivity ranking",
+        x=0.06, ha="left", color=INK, fontsize=12, fontweight="bold",
+    )
+    fig.text(
+        0.06, 0.905,
+        f"Reference: {cfg['dataset']} (record {cfg['record']}). Model runs restart from the true "
+        f"state every {cfg['window_s']:g} s and use the record's realized input. "
+        f"Grids span ±{100 * float(cfg['rel_range']):g}% of each true value; ring = true value.\n"
+        f"Sensitivities are with respect to log parameters; Fisher information uses the "
+        f"record's noise SD ({float(d['noise_sd']):.3g} mV).",
+        color=INK_2, fontsize=9, ha="left",
+    )
+    out_path = Path(out_path)
+    fig.savefig(out_path, dpi=150)
+    plt.close(fig)
+    return out_path
