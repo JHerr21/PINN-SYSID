@@ -1,0 +1,16 @@
+# T2.3: Cramer-Rao bounds and correlations for every 2-3 parameter subset,
+# at every A value of the H1 sweep, in the nominal cell and the hardest cells.
+# Run with experiments/05_parameter_choice.py.
+name: parameter_choice
+seed: 0                   # the analysis is deterministic; seed recorded for the run folder
+
+data_dir: data/synthetic  # relative to the repo root
+cells: [nominal, duration_2s, snr_0dB]   # nominal + the shortest and the noisiest cell
+A_values: [3.25, 3.75, 4.0, 4.5]         # mV, the H1 sweep's A values
+seed_index: 0             # dataset seed index k in A<A>_seed<k>
+record: 0
+
+window_s: 0.5             # same windows as T2.1-T2.2
+params: [A, B, a, b, C, e0, v0, r]       # parameters F is computed for
+subset_sizes: [2, 3]
+must_include: [A]         # only subsets containing these (Gate 1: A plus one or two more)

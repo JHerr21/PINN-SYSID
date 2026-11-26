@@ -1,5 +1,5 @@
 """Identifiability analysis: fit-error landscapes (T2.1) and local sensitivity
-with Fisher information (T2.2).
+with Fisher information (T2.2), and bounds for estimated subsets (T2.3).
 
 Both analyses compare model output to a reference record in short windows.
 Each window starts from the record's true state at its first observation
@@ -280,3 +280,52 @@ def window_obs_from_seconds(window_s: float) -> int:
     if abs(w - round(w)) > 1e-9:
         raise ValueError("window_s must be a multiple of 1/256 s")
     return int(round(w))
+
+
+def subset_summary(
+    F: Union[torch.Tensor, np.ndarray],
+    names: Sequence[str],
+    subset: Sequence[str],
+) -> Dict[str, Any]:
+    """Cramer-Rao bounds when only `subset` is estimated (T2.3).
+
+    The parameters not in the subset are held at their true values, so the
+    bound comes from the subset's own block of F: cov = (F_SS)^-1, not the
+    subset's block of F^-1 (which would let the other parameters vary too).
+
+    Args:
+        F: (k, k) Fisher information for the log parameters `names`.
+        names: parameter names in the order of F's rows.
+        subset: the estimated parameters (at least two, all in names).
+
+    Returns a dict with
+        rel_sd     {name: lower bound on its relative standard deviation}
+        corr       (m, m) correlation matrix of the subset, in subset order
+        max_corr   largest |off-diagonal correlation|
+        cond       condition number of F_SS
+    """
+    F = np.asarray(F, dtype=np.float64)
+    names = list(names)
+    subset = list(subset)
+    if len(subset) < 2:
+        raise ValueError("subset needs at least two parameters")
+    if len(set(subset)) != len(subset):
+        raise ValueError("subset names must be unique")
+    missing = [n for n in subset if n not in names]
+    if missing:
+        raise KeyError(f"not in names: {missing}")
+    idx = [names.index(n) for n in subset]
+    F_ss = F[np.ix_(idx, idx)]
+    w = np.linalg.eigvalsh(F_ss)
+    if w.min() <= 0.0:
+        raise ValueError(f"F block for {subset} is not positive definite")
+    cov = np.linalg.inv(F_ss)
+    sd = np.sqrt(np.diag(cov))
+    corr = cov / np.outer(sd, sd)
+    off = np.abs(corr[~np.eye(len(subset), dtype=bool)])
+    return {
+        "rel_sd": dict(zip(subset, sd.tolist())),
+        "corr": corr,
+        "max_corr": float(off.max()),
+        "cond": float(w.max() / w.min()),
+    }

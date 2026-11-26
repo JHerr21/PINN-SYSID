@@ -1,0 +1,5 @@
+# Gate 1 (T2.3): the parameters both identification methods estimate.
+# All other Jansen-Rit parameters stay fixed at their true values.
+# Chosen from the T2.1-T2.2 identifiability analysis; reasons and numbers in
+# notes/identifiability.md. Frozen: change only by reopening Gate 1.
+estimated: [A, B]

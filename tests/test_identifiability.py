@@ -16,6 +16,7 @@ from sz.identifiability import (
     output_sensitivity,
     relative_grid,
     simulate_windows,
+    subset_summary,
     window_obs_from_seconds,
 )
 from sz.model import make_params, output
@@ -160,3 +161,41 @@ def test_load_reference_round_trip(tmp_path):
     assert ref["noise_sd"] == 0.4
     with pytest.raises(IndexError):
         load_reference(tmp_path / "A4.00_seed0", record=2)
+
+
+
+# T2.3: subsets with the other parameters fixed
+
+def test_subset_summary_uses_the_block_of_F_not_the_block_of_F_inverse():
+    F = np.array([[4.0, 1.5, 0.8], [1.5, 2.0, 0.6], [0.8, 0.6, 1.0]])
+    names = ["A", "B", "C"]
+    s = subset_summary(F, names, ["A", "B"])
+    cov = np.linalg.inv(F[:2, :2])
+    assert s["rel_sd"]["A"] == pytest.approx(math.sqrt(cov[0, 0]))
+    assert s["rel_sd"]["B"] == pytest.approx(math.sqrt(cov[1, 1]))
+    assert s["max_corr"] == pytest.approx(abs(-1.5 / math.sqrt(4.0 * 2.0)))
+    # fixing C gives a smaller bound than letting it vary
+    assert s["rel_sd"]["A"] < math.sqrt(np.linalg.inv(F)[0, 0])
+    w = np.linalg.eigvalsh(F[:2, :2])
+    assert s["cond"] == pytest.approx(w.max() / w.min())
+
+
+def test_subset_summary_full_set_matches_fisher_summary():
+    F = torch.tensor([[4.0, 1.5], [1.5, 1.0]], dtype=torch.float64)
+    s = subset_summary(F, ["A", "B"], ["B", "A"])          # order follows the subset
+    S = fisher_summary(F)
+    assert s["rel_sd"]["A"] == pytest.approx(S["rel_sd"][0])
+    assert s["rel_sd"]["B"] == pytest.approx(S["rel_sd"][1])
+    np.testing.assert_allclose(s["corr"], S["corr"][::-1, ::-1])
+
+
+def test_subset_summary_rejects_bad_subsets():
+    F = np.eye(3)
+    with pytest.raises(ValueError):
+        subset_summary(F, ["A", "B", "C"], ["A"])
+    with pytest.raises(ValueError):
+        subset_summary(F, ["A", "B", "C"], ["A", "A"])
+    with pytest.raises(KeyError):
+        subset_summary(F, ["A", "B", "C"], ["A", "Z"])
+    with pytest.raises(ValueError):
+        subset_summary(np.ones((3, 3)), ["A", "B", "C"], ["A", "B"])

@@ -1,0 +1,29 @@
+name: parameter_choice
+seed: 0
+data_dir: data/synthetic
+cells:
+- nominal
+- duration_2s
+- snr_0dB
+A_values:
+- 3.25
+- 3.75
+- 4.0
+- 4.5
+seed_index: 0
+record: 0
+window_s: 0.5
+params:
+- A
+- B
+- a
+- b
+- C
+- e0
+- v0
+- r
+subset_sizes:
+- 2
+- 3
+must_include:
+- A
